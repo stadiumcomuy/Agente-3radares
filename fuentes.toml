@@ -8,7 +8,7 @@ url = "https://www.stadium.com.uy"
 # Tu catálogo con precios. Se usa para cruzar todo: "¿lo tenemos?" y "¿a qué precio?".
 # Elegí una fuente (la primera que esté completa gana):
 csv = ""                  # ej. "catalogo.csv" con columnas: sku, nombre, marca, categoria, precio, stock, url
-feed_google = ""          # URL del feed XML de Google Merchant / Shopping (la mayoría de las plataformas lo exponen)
+feed_google = "https://www.stadium.com.uy/feeds/productos/std/google"  # feed XML de Google Merchant / Shopping (la mayoría de las plataformas lo exponen)
 sitemap = ""              # URL del sitemap de productos; se leen los JSON-LD de cada página (lento, último recurso)
 max_paginas = 400
 
