@@ -10,6 +10,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from . import guardar_html
 from ..catalogo import Producto, _productos_jsonld
 from ..config import HTTP_HEADERS, HTTP_TIMEOUT
 
@@ -87,22 +88,27 @@ def extraer_banners(html: str, base: str) -> List[Banner]:
     return out[:60]
 
 
-def _leer(s: requests.Session, url: str) -> Optional[str]:
+def _leer(s: requests.Session, url: str, etiqueta: str = "") -> tuple[Optional[str], str]:
+    """Devuelve (html, motivo). motivo describe el fallo cuando html es None."""
     try:
         r = s.get(url, headers=HTTP_HEADERS, timeout=HTTP_TIMEOUT)
-        if r.ok and "text/html" in r.headers.get("content-type", "text/html"):
-            return r.text
-    except requests.RequestException:
-        return None
-    return None
+    except requests.RequestException as e:
+        return None, f"{type(e).__name__}"
+    if not r.ok:
+        return None, f"HTTP {r.status_code}"
+    if "text/html" not in r.headers.get("content-type", "text/html"):
+        return None, f"content-type {r.headers.get('content-type')}"
+    if etiqueta:
+        guardar_html(etiqueta, r.text)
+    return r.text, ""
 
 
 def leer_competidor(nombre: str, url: str, max_links: int = 8, pausa: float = 0.8, sesion: Optional[requests.Session] = None) -> Competidor:
     s = sesion or requests.Session()
     comp = Competidor(nombre=nombre, url=url)
-    html = _leer(s, url)
+    html, motivo = _leer(s, url, f"competidor_{nombre}_home")
     if html is None:
-        comp.error = "no se pudo leer la home"
+        comp.error = f"no se pudo leer la home ({motivo})"
         return comp
     comp.banners = extraer_banners(html, url)
     comp.productos = _productos_jsonld(html, url)
@@ -112,7 +118,7 @@ def leer_competidor(nombre: str, url: str, max_links: int = 8, pausa: float = 0.
             hrefs.append(b.href)
     for h in hrefs[:max_links]:
         time.sleep(pausa)
-        page = _leer(s, h)
+        page, _ = _leer(s, h)
         if page:
             comp.productos.extend(_productos_jsonld(page, h))
     vistos = set()

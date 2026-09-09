@@ -12,7 +12,7 @@ def _items():
     items = []
     for i in range(12):
         items.append(ItemMetricas(f"Producto {i}", "Nike", "running", vistas=500 + i * 50, carrito=40, compras=10))  # CR ~2%
-    items.append(ItemMetricas("574 Classic", "New Balance", "lifestyle", vistas=120, carrito=30, compras=12))  # CR 10%, pocas vistas
+    items.append(ItemMetricas("574 Classic", "New Balance", "lifestyle", vistas=220, carrito=60, compras=25))  # CR 11%, pocas vistas
     items.append(ItemMetricas("Gel-Kayano 31", "Asics", "running", vistas=900, carrito=200, compras=5))       # carrito alto, no cierra
     return items
 

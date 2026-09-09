@@ -15,6 +15,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
+from . import guardar_html
 from ..catalogo import parsear_precio
 from ..config import HTTP_HEADERS, HTTP_TIMEOUT
 
@@ -110,7 +111,10 @@ def desde_paginas(consultas: List[str], sitio: str = "MLU", max_items_preguntas:
         try:
             r = s.get(url, headers=HTTP_HEADERS, timeout=HTTP_TIMEOUT)
             r.raise_for_status()
+            guardar_html(f"meli_listado_{_slug(q)}", r.text)
             total, pubs = parsear_listado(r.text)
+            if not pubs:
+                datos.errores.append(f"{q}: la página respondió pero no se reconocieron publicaciones (¿cambió el HTML o hay captcha?)")
         except requests.RequestException as e:
             datos.errores.append(f"{q}: {e}")
             continue
@@ -121,6 +125,7 @@ def desde_paginas(consultas: List[str], sitio: str = "MLU", max_items_preguntas:
                 time.sleep(pausa)
                 rp = s.get(p.url, headers=HTTP_HEADERS, timeout=HTTP_TIMEOUT)
                 if rp.ok:
+                    guardar_html(f"meli_item_{_slug(q)}_{pubs.index(p)}", rp.text)
                     p.n_preguntas, p.preguntas = parsear_preguntas(rp.text)
             except requests.RequestException:
                 continue

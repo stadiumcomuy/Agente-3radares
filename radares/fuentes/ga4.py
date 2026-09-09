@@ -58,30 +58,38 @@ def _cliente(credenciales: str):
     return BetaAnalyticsDataClient()
 
 
-def _run(client, property_id: str, dims: List[str], mets: List[str], dias: int, limit: int = 5000, filtro_evento: Optional[str] = None):
+def _run(client, property_id: str, dims: List[str], mets: List[str], dias: int, limit: int = 100000, filtro_evento: Optional[str] = None):
+    """Corre un informe paginando de a 10000 filas hasta `limit`."""
     from google.analytics.data_v1beta.types import (
         DateRange, Dimension, Filter, FilterExpression, Metric, OrderBy, RunReportRequest,
     )
 
-    req = RunReportRequest(
-        property=f"properties/{property_id}",
-        dimensions=[Dimension(name=d) for d in dims],
-        metrics=[Metric(name=m) for m in mets],
-        date_ranges=[DateRange(start_date=f"{dias}daysAgo", end_date="yesterday")],
-        order_bys=[OrderBy(metric=OrderBy.MetricOrderBy(metric_name=mets[0]), desc=True)],
-        limit=limit,
-    )
-    if filtro_evento:
-        req.dimension_filter = FilterExpression(
-            filter=Filter(field_name="eventName", string_filter=Filter.StringFilter(value=filtro_evento))
-        )
-    resp = client.run_report(req)
     filas = []
-    for r in resp.rows:
-        d = {dims[i]: r.dimension_values[i].value for i in range(len(dims))}
-        for i, m in enumerate(mets):
-            d[m] = r.metric_values[i].value
-        filas.append(d)
+    offset = 0
+    pagina = 10000
+    while offset < limit:
+        req = RunReportRequest(
+            property=f"properties/{property_id}",
+            dimensions=[Dimension(name=d) for d in dims],
+            metrics=[Metric(name=m) for m in mets],
+            date_ranges=[DateRange(start_date=f"{dias}daysAgo", end_date="yesterday")],
+            order_bys=[OrderBy(metric=OrderBy.MetricOrderBy(metric_name=mets[0]), desc=True)],
+            limit=min(pagina, limit - offset),
+            offset=offset,
+        )
+        if filtro_evento:
+            req.dimension_filter = FilterExpression(
+                filter=Filter(field_name="eventName", string_filter=Filter.StringFilter(value=filtro_evento))
+            )
+        resp = client.run_report(req)
+        for r in resp.rows:
+            d = {dims[i]: r.dimension_values[i].value for i in range(len(dims))}
+            for i, m in enumerate(mets):
+                d[m] = r.metric_values[i].value
+            filas.append(d)
+        offset += len(resp.rows)
+        if len(resp.rows) < pagina or offset >= resp.row_count:
+            break
     return filas
 
 
@@ -103,8 +111,10 @@ def desde_api(property_id: str, credenciales: str = "", dias: int = 28) -> Datos
         if f["itemName"] and f["itemName"] != "(not set)"
     ]
     busquedas: List[TerminoBusqueda] = []
+    # keyEvents a secas cuenta el propio evento de búsqueda si está marcado como clave: no sirve.
+    # Se pide la compra explícitamente; si la propiedad no lo acepta, se cae a volumen y sesiones.
     intentos = (
-        (["searchTerm"], ["eventCount", "sessions", "keyEvents"]),
+        (["searchTerm"], ["eventCount", "sessions", "keyEvents:purchase"]),
         (["searchTerm"], ["eventCount", "sessions"]),
         (["searchTerm"], ["eventCount"]),
     )
@@ -123,13 +133,18 @@ def desde_api(property_id: str, credenciales: str = "", dias: int = 28) -> Datos
                 TerminoBusqueda(
                     termino=t, busquedas=int(float(f["eventCount"] or 0)),
                     sesiones=int(float(f.get("sessions", 0) or 0)),
-                    conversiones=int(float(f["keyEvents"])) if "keyEvents" in f else None,
+                    conversiones=int(float(f["keyEvents:purchase"])) if "keyEvents:purchase" in f else None,
                 )
             )
         break
     else:
         if ultimo_error:
             raise ultimo_error
+    # Si las "conversiones" igualan a las búsquedas en casi todas las filas, la métrica no mide compras: se descarta.
+    con_conv = [b for b in busquedas if b.conversiones is not None]
+    if con_conv and sum(1 for b in con_conv if b.conversiones >= b.busquedas) > len(con_conv) * 0.5:
+        for b in busquedas:
+            b.conversiones = None
     return DatosGA4(items=items, busquedas=busquedas, dias=dias, origen=f"GA4 API {property_id}")
 
 

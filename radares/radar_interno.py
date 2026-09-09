@@ -1,12 +1,36 @@
 """Demanda interna: qué convierte bien pero se ve poco (subexpuesto), y qué se busca en el sitio sin respuesta."""
 from __future__ import annotations
 
+import re
 import statistics
 from dataclasses import dataclass, field
 from typing import List
 
 from .catalogo import Catalogo
 from .fuentes.ga4 import DatosGA4, ItemMetricas
+
+# "Championes de Hombre Adidas Galaxy 7 M - Negro - Blanco Talle 42 (08.5 USA)" -> sin " Talle 42 (08.5 USA)"
+_TALLE = re.compile(r"\s+talle\s+\S+(\s*\([^)]*\))?\s*$", re.I)
+
+
+def nombre_producto(nombre: str) -> str:
+    return _TALLE.sub("", nombre).strip()
+
+
+def agrupar_por_producto(items: List[ItemMetricas]) -> List[ItemMetricas]:
+    """Suma las variantes por talle en un solo ítem por producto y color."""
+    agg: dict[str, ItemMetricas] = {}
+    for i in items:
+        k = nombre_producto(i.nombre)
+        a = agg.get(k)
+        if a is None:
+            agg[k] = ItemMetricas(k, i.marca, i.categoria, i.vistas, i.carrito, i.compras, i.ingresos)
+        else:
+            a.vistas += i.vistas
+            a.carrito += i.carrito
+            a.compras += i.compras
+            a.ingresos += i.ingresos
+    return list(agg.values())
 
 
 @dataclass
@@ -32,46 +56,51 @@ def _pct(xs: List[float], p: float) -> float:
     return xs[k]
 
 
-def detectar_subexpuestos(items: List[ItemMetricas], min_vistas: int = 20, max_n: int = 12) -> List[Senal]:
-    base = [i for i in items if i.vistas >= min_vistas]
+def detectar_subexpuestos(items: List[ItemMetricas], min_vistas: int = 20, max_n: int = 12, min_compras: int = 3) -> List[Senal]:
+    # Se excluyen add-ons de checkout (más compras que vistas) y se compara contra la conversión global del sitio.
+    base = [i for i in items if i.vistas >= min_vistas and i.compras <= i.vistas]
     if len(base) < 8:
         return []
-    crs = [i.cr for i in base]
-    vistas = [float(i.vistas) for i in base]
-    cr_alto = max(_pct(crs, 0.75), statistics.median(crs) * 1.5)
-    vistas_med = statistics.median(vistas)
-    vistas_p75 = _pct(vistas, 0.75)
-    cands = [i for i in base if i.cr >= cr_alto and i.cr > 0 and i.vistas <= vistas_med]
+    cr_global = sum(i.compras for i in base) / max(1, sum(i.vistas for i in base))
+    con_ventas = [float(i.vistas) for i in base if i.compras >= 2]
+    if len(con_ventas) < 5:
+        return []
+    vistas_med = statistics.median(con_ventas)
+    vistas_p75 = _pct(con_ventas, 0.75)
+    cands = [i for i in base if i.compras >= min_compras and i.cr >= max(2 * cr_global, 0.02) and i.vistas <= vistas_med]
     cands.sort(key=lambda i: -(i.cr * i.compras))
     out = []
     for i in cands[:max_n]:
         out.append(
             Senal(
                 "subexpuesto", i.nombre,
-                f"{i.compras} compras sobre {i.vistas} vistas (CR {i.cr:.1%}, mediana del sitio {statistics.median(crs):.1%}). "
-                f"Vistas por debajo de la mediana ({vistas_med:.0f}); los productos top tienen {vistas_p75:.0f}+.",
+                f"{i.compras} compras sobre {i.vistas} vistas (CR {i.cr:.1%}; el sitio convierte {cr_global:.1%} vista a compra). "
+                f"Vistas por debajo de la mediana de los productos que venden ({vistas_med:.0f}); el cuartil alto tiene {vistas_p75:.0f}+.",
                 {"marca": i.marca, "categoria": i.categoria, "vistas": i.vistas, "compras": i.compras, "cr": round(i.cr, 4), "ingresos": round(i.ingresos, 2)},
             )
         )
     return out
 
 
-def detectar_carrito_sin_compra(items: List[ItemMetricas], min_vistas: int = 20, max_n: int = 5) -> List[Senal]:
-    base = [i for i in items if i.vistas >= min_vistas and i.carrito >= 5]
-    if len(base) < 8:
-        return []
-    tasas = [i.tasa_carrito for i in base]
-    alto = _pct(tasas, 0.75)
-    cands = [i for i in base if i.tasa_carrito >= alto and i.compras / i.carrito < 0.25]
+def detectar_carrito_sin_compra(items: List[ItemMetricas], catalogo: Catalogo, min_carrito: int = 20, max_n: int = 6) -> List[Senal]:
+    """A nivel talle: lo agregan al carrito y no cierra. Se cruza con la disponibilidad del feed."""
+    cands = [i for i in items if i.carrito >= min_carrito and i.compras / i.carrito < 0.1]
     cands.sort(key=lambda i: -i.carrito)
-    return [
-        Senal(
-            "carrito_sin_compra", i.nombre,
-            f"{i.carrito} agregados al carrito, {i.compras} compras. Lo quieren y no cierra: talle, precio o envío.",
-            {"marca": i.marca, "vistas": i.vistas, "carrito": i.carrito, "compras": i.compras},
+    out = []
+    for i in cands[:max_n]:
+        stock = ""
+        if len(catalogo):
+            m = catalogo.buscar(i.nombre, umbral=90, max_n=1)
+            if m and m[0].producto.stock:
+                stock = f" Feed: {m[0].producto.stock}" + (f", precio {m[0].producto.precio:.0f}" if m[0].producto.precio else "") + "."
+        out.append(
+            Senal(
+                "carrito_sin_compra", i.nombre,
+                f"{i.carrito} agregados al carrito, {i.compras} compras, {i.vistas} vistas. Lo quieren y no cierra.{stock}",
+                {"marca": i.marca, "vistas": i.vistas, "carrito": i.carrito, "compras": i.compras, "stock_feed": stock.strip()},
+            )
         )
-        for i in cands[:max_n]
-    ]
+    return out
 
 
 def detectar_marcas(items: List[ItemMetricas], max_n: int = 4) -> List[Senal]:
@@ -90,14 +119,14 @@ def detectar_marcas(items: List[ItemMetricas], max_n: int = 4) -> List[Senal]:
     total_c = sum(a["compras"] for a in agg.values()) or 1
     out = []
     for m, a in agg.items():
-        if a["vistas"] < 100 or a["compras"] < 3:
-            continue
         share_v, share_c = a["vistas"] / total_v, a["compras"] / total_c
+        if a["vistas"] < 200 or a["compras"] < 10 or share_v < 0.003:
+            continue
         if share_c >= share_v * 1.4:
             out.append(
                 Senal(
                     "marca_subexpuesta", m,
-                    f"{share_c:.0%} de las compras con {share_v:.0%} de las vistas. Convierte muy por encima de su exposición.",
+                    f"{share_c:.1%} de las compras con {share_v:.1%} de las vistas ({a['compras']} compras). Convierte muy por encima de su exposición.",
                     {"vistas": a["vistas"], "compras": a["compras"], "share_vistas": round(share_v, 3), "share_compras": round(share_c, 3)},
                 )
             )
@@ -110,7 +139,7 @@ def cruzar_busquedas(ga4: DatosGA4, catalogo: Catalogo, subexpuestos: List[Senal
         return []
     top = sorted(ga4.busquedas, key=lambda b: -b.busquedas)[:60]
     nombres_sub = {s.sujeto.lower() for s in subexpuestos}
-    out = []
+    out = [Senal("top_busquedas", "términos más buscados", ", ".join(f"{b.termino} ({b.busquedas})" for b in top[:25]), {})]
     for b in top:
         estado, matches = catalogo.tenemos(b.termino) if len(catalogo) else ("sin_catalogo", [])
         if estado == "no":
@@ -126,14 +155,15 @@ def cruzar_busquedas(ga4: DatosGA4, catalogo: Catalogo, subexpuestos: List[Senal
 
 def radar_demanda_interna(ga4: DatosGA4, catalogo: Catalogo, min_vistas: int = 20) -> RadarInterno:
     r = RadarInterno(dias=ga4.dias)
-    sub = detectar_subexpuestos(ga4.items, min_vistas)
+    productos = agrupar_por_producto(ga4.items)
+    sub = detectar_subexpuestos(productos, min_vistas)
     r.senales += sub
-    r.senales += detectar_marcas(ga4.items)
+    r.senales += detectar_marcas(productos)
     r.senales += cruzar_busquedas(ga4, catalogo, sub)
-    r.senales += detectar_carrito_sin_compra(ga4.items, min_vistas)
+    r.senales += detectar_carrito_sin_compra(ga4.items, catalogo)
     n_items = len(ga4.items)
     r.resumen = (
-        f"{n_items} ítems con datos en {ga4.dias} días, {len(ga4.busquedas)} términos de búsqueda interna. "
+        f"{n_items} variantes ({len(productos)} productos) con datos en {ga4.dias} días, {len(ga4.busquedas)} términos de búsqueda interna. "
         f"Subexpuestos: {len(sub)}. Marcas que convierten sobre su exposición: {sum(1 for s in r.senales if s.tipo == 'marca_subexpuesta')}. "
         f"Búsquedas sin respuesta en catálogo: {sum(1 for s in r.senales if s.tipo == 'buscado_sin_catalogo')}."
     )

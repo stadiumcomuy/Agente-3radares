@@ -102,11 +102,12 @@ def recolectar(
         log("[radares] leyendo Google Trends…")
         trends = _intentar("Trends", lambda: cargar_trends(conf["trends"], semillas_extra, trends_csv), estado, log)
         if trends:
-            estado["Trends"] = f"{trends.origen}: {len(trends.relacionadas)} consultas relacionadas, {len(trends.interes)} series" + (f"; errores: {len(trends.errores)}" if trends.errores else "")
+            estado["Trends"] = f"{trends.origen}: {len(trends.relacionadas)} consultas relacionadas, {len(trends.interes)} series" + (f"; errores: {len(trends.errores)} ({trends.errores[0][:90]})" if trends.errores else "")
         log("[radares] leyendo MercadoLibre…")
         meli = _intentar("MercadoLibre", lambda: cargar_meli(conf["meli"], semillas_extra[:4]), estado, log)
         if meli:
-            estado["MercadoLibre"] = f"{meli.origen}: {len(meli.consultas)} consultas" + (f"; errores: {len(meli.errores)}" if meli.errores else "")
+            n_pubs = sum(len(c.publicaciones) for c in meli.consultas)
+            estado["MercadoLibre"] = f"{meli.origen}: {len(meli.consultas)} consultas, {n_pubs} publicaciones" + (f"; avisos: {len(meli.errores)} ({meli.errores[0][:90]})" if meli.errores else "")
         if trends or meli:
             ev.externo = radar_demanda_externa(trends, meli, catalogo)
 

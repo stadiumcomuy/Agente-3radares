@@ -26,6 +26,9 @@ def _evidencia(args):
     from .recolectar import recolectar
 
     conf = cargar_fuentes()
+    if args.guardar_html:
+        from . import fuentes as _f
+        _f.DEBUG_DIR = args.guardar_html
     return recolectar(
         conf, _frentes(args),
         catalogo_csv=args.catalogo, ga4_items=args.ga4_items, ga4_busquedas=args.ga4_busquedas, trends_csv=args.trends_csv,
@@ -172,6 +175,7 @@ def _args_fuentes(p: argparse.ArgumentParser) -> None:
     p.add_argument("--ga4-items", help="CSV exportado de GA4: informe de ítems (en vez de la API).")
     p.add_argument("--ga4-busquedas", help="CSV exportado de GA4: términos de búsqueda (en vez de la API).")
     p.add_argument("--trends-csv", help="CSV de consultas relacionadas exportado de Google Trends (en vez de pytrends).")
+    p.add_argument("--guardar-html", metavar="DIR", help="Guarda el HTML crudo de MercadoLibre y competidores en DIR para depurar los parsers.")
 
 
 def construir_parser() -> argparse.ArgumentParser:
@@ -216,5 +220,10 @@ def construir_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    for flujo in (sys.stdout, sys.stderr):
+        try:
+            flujo.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     args = construir_parser().parse_args(argv)
     sys.exit(args.func(args))

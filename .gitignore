@@ -15,3 +15,5 @@ memoria/*
 !tests/**/*.json
 catalogo.csv
 ga4*.csv
+# HTML crudo para depurar parsers: se sube a propósito con --guardar-html diagnostico/html
+!diagnostico/
