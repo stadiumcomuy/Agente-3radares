@@ -1,82 +1,164 @@
-# Agente de tres radares
+# Radar de tres frentes
 
-Detecta grietas accionables para un e-commerce de calzado en Uruguay. Tres radares: demanda interna, demanda externa y oferta externa. Cada corrida entrega de 3 a 5 oportunidades con qué está pasando, por qué es una grieta, marca sugerida, acción mínima, qué validar y score de impacto, esfuerzo, confianza y urgencia. Elige una sola mejor apuesta, pide feedback concreto y aprende de él. Salida ejecutiva, cero planillas.
+Agente para un e-commerce de calzado en Uruguay. Mira tres frentes independientes, cruza todo contra el catálogo propio y entrega un informe escueto, ejecutivo y directo. Sin planillas, sin presentaciones.
+
+## Los tres frentes
+
+**Demanda interna (GA4).** Qué busca o mira la gente en el sitio que convierte bien pero se ve poco. La gente que lo encuentra lo compra; lo encuentra poca gente. Eso hay que bombear. También: qué se busca en el sitio y no está en el catálogo.
+
+**Demanda externa (Google Trends + MercadoLibre).** Qué quiere y busca la gente fuera del sitio: consultas en alza en Trends, publicaciones con más preguntas y ventas en MELI. Si lo tenemos, por qué bombearlo y a qué precio estamos contra MELI.
+
+**Oferta externa (competencia).** Qué bombea la competencia en sus banners y destacados, con qué productos y a qué precio. Si lo tenemos, si podemos bombearlo, y si estamos más caros o más baratos para aprovechar o achicar el gap.
+
+Cada corrida entrega entre 3 y 5 oportunidades en total, repartidas por frente, cada una con dato, grieta, marca, producto o término exacto, acción mínima, qué validar y score 1-5 de impacto, esfuerzo, confianza y urgencia. Elige una sola apuesta y cierra con tres preguntas cerradas. El feedback se destila en lecciones que cambian las corridas siguientes.
 
 ## Cómo funciona
 
-Cada corrida son dos llamadas a Claude Opus 5 más una tercera cuando das feedback:
-
-1. **Investigación.** Lee `perfil.md`, la memoria (lecciones y corridas anteriores) y los datos internos que le pases. Sale a buscar con la herramienta de búsqueda web, con ubicación Uruguay, y escribe un dossier de hallazgos con fuentes y fecha. Lo que no tiene fuente queda marcado.
-2. **Análisis.** Convierte el dossier en un informe con esquema fijo (salida estructurada). Ahí aplica el criterio: 3 a 5 grietas, una mejor apuesta, 3 preguntas cerradas para vos.
-3. **Aprendizaje.** Cuando respondés, destila tu feedback en lecciones operativas de una oración y registra qué oportunidad validaste, descartaste o estás probando. Eso se inyecta en todas las corridas siguientes.
-
-Todo lo que aprende queda en `memoria/` en JSON plano. Podés editarlo o borrarlo a mano.
+1. **Recolectar.** Código determinista, sin modelo. Lee GA4, Trends, MELI y los sitios de la competencia, cruza cada señal contra el catálogo (¿lo tenemos? ¿a qué precio?) y calcula las señales: ítems subexpuestos, marcas que convierten sobre su exposición, búsquedas sin respuesta, consultas en alza, publicaciones con preguntas, banners de competidores y gaps de precio. Cada fuente falla por separado y el informe lo dice.
+2. **Analizar.** Claude Opus 5 recibe la evidencia ya cruzada, el perfil del negocio y la memoria, y produce el informe con esquema fijo. Puede usar búsqueda web solo para llenar huecos concretos (pautas de un competidor, preguntas de una publicación).
+3. **Aprender.** Con tu feedback, destila lecciones de una oración y registra qué oportunidad validaste, descartaste o estás probando.
 
 ## Instalación
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env   # y completá ANTHROPIC_API_KEY, o usá `ant auth login`
+cp .env.example .env    # ANTHROPIC_API_KEY, y opcionalmente GA4 y MELI
 ```
 
-Editá `perfil.md` antes de la primera corrida. Es lo que separa una grieta para tu negocio de una idea genérica.
+Después configurá `fuentes.toml` y `perfil.md`. Sin catálogo no hay cruce, así que empezá por ahí.
+
+## Fuentes: qué necesita cada una
+
+**Catálogo** (obligatorio para cruzar). Una de tres, en `[catalogo]`:
+- `csv`: exportación con columnas nombre, marca, precio y opcionalmente sku, categoria, stock, url. Acepta `;` o `,`.
+- `feed_google`: URL del feed XML de Google Merchant. Casi todas las plataformas lo exponen.
+- `sitemap`: sitemap de productos; se leen los JSON-LD de cada página. Lento, último recurso.
+
+**GA4.** API oficial con service account: `property_id` y `credenciales` en `[ga4]`, o `GA4_PROPERTY_ID` y `GOOGLE_APPLICATION_CREDENTIALS`. La service account tiene que tener acceso de lectura a la propiedad. Sin API: exportá desde GA4 el informe de ítems (nombre, marca, vistas, agregados al carrito, compras, ingresos) y el de términos de búsqueda, y pasalos con `--ga4-items` y `--ga4-busquedas`.
+
+**Google Trends.** Usa `pytrends`, que no es oficial y devuelve 429 seguido. Cuando cae, el informe lo dice. Alternativa: exportá "consultas relacionadas" desde trends.google.com y pasalo con `--trends-csv`.
+
+**MercadoLibre.** La API pública de búsqueda quedó restringida en 2024-2025. Con `MELI_ACCESS_TOKEN` usa la API; sin token lee las páginas públicas de listado y de producto (títulos, precios, "más vendido", preguntas). El scraping puede romperse si MELI cambia el HTML.
+
+**Competencia.** Lista de sitios en `[competencia]`. Lee la home, extrae banners y links promocionales, sigue esos links y saca productos con precio de los JSON-LD. No lee pautas de Meta ni Instagram: la Ad Library no expone pautas comerciales fuera de la UE por API, e Instagram exige login. Para eso el analista puede usar búsqueda web, con resultado variable.
 
 ## Uso
 
 ```bash
-radares correr                                  # los tres radares
-radares correr --foco oferta_externa            # un solo radar
-radares correr --nota "Hot Sale en 3 semanas, sobrestock de Fila 42-44"
-radares correr --datos exportacion_ga4.csv ventas_agosto.csv
-radares correr -v                               # muestra razonamiento y dossier en vivo
+radares fuentes                      # diagnóstico: qué fuente anda y qué devuelve. No llama al modelo.
+radares fuentes --detalle            # además muestra las señales detectadas
+radares correr                       # los tres frentes
+radares correr --frente demanda_interna
+radares correr --nota "Hot Sale en 3 semanas, sobrestock de Fila"
+radares correr --ga4-items items.csv --ga4-busquedas busquedas.csv --catalogo catalogo.csv
+radares correr --solo-evidencia      # imprime la evidencia cruzada y no gasta tokens
 
-radares feedback "La 2 la descarto, Fila ya rotó. On me la ofreció un distribuidor argentino en junio."
-radares feedback 20260909-1430 "..."            # feedback a una corrida específica (acepta prefijo)
-
-radares ver                                     # última corrida
-radares ver 20260909-1430 --dossier             # el dossier de investigación con fuentes
+radares feedback "DI-2 la descarto, no traigo Crocs. OE-1 sí: bajo Pegasus 8%."
+radares ver                          # última corrida
+radares ver 20260909 --evidencia     # la evidencia cruda que vio el analista
 radares historial
 radares lecciones
-radares lecciones --agregar "Nunca sugerir calzado formal." --aplica-a general
-radares lecciones --borrar L1a2b3c
+radares lecciones --agregar "Fila no se bombea hasta liquidar el sobrestock." --aplica-a marca:Fila
 ```
 
-## Datos internos (GA4, ventas)
+## Cómo se ve el informe
 
-El agente no se conecta a Google Analytics. Le pasás exportaciones con `--datos`: CSV o JSON de GA4 (páginas más vistas, búsquedas del sitio, productos con más agregados al carrito), o ventas por producto y talle. Las usa como evidencia primaria del radar de demanda interna y cita la métrica cuando la usa. Tope de 120.000 caracteres por corrida: filtrá a las últimas 8 semanas o al top de productos antes de pasarlo.
+```
+# Radar · 2026-09-09
+Fuentes: GA4: API: 812 ítems, 340 términos · Trends: caída: 429 · MercadoLibre: 6 consultas · Competencia: 4/6 sitios leídos
 
-## Costos
+## Demanda interna
+Dos productos convierten al doble de la mediana con la mitad de vistas.
 
-Cada corrida completa usa Claude Opus 5 con razonamiento adaptativo, hasta 18 búsquedas web (configurable con `RADARES_MAX_BUSQUEDAS`) y dos llamadas largas. Presupuestá entre 1 y 3 dólares por corrida según cuánto investigue. El feedback cuesta centavos. El uso de tokens y búsquedas queda registrado al pie de cada informe.
+DI-1 · New Balance 574 talle 44 convierte y no se ve  ← APUESTA
+Lo tenemos · New Balance · New Balance 574 talle 44 convierte y no se ve
+Dato. Dato con número y fuente.
+Grieta. Brecha concreta.
+Acción. Bombear en home 14 días.
+Validar. Rotación semanal.
+Impacto 4 · Esfuerzo 1 · Confianza 5 · Urgencia 4 · Prioridad 80.0
+Fuentes: GA4
+
+DI-2 · Buscan 'crocs' y no hay catálogo
+No lo tenemos · Crocs · Buscan 'crocs' y no hay catálogo
+Dato. Dato con número y fuente.
+Grieta. Brecha concreta.
+Acción. Bombear en home 14 días.
+Validar. Rotación semanal.
+Impacto 2 · Esfuerzo 3 · Confianza 3 · Urgencia 2 · Prioridad 4.0
+Fuentes: GA4
+
+## Demanda externa
+MELI muestra preguntas repetidas por talle en Samba.
+
+DE-1 · Samba OG: preguntas por talle en MELI
+Lo tenemos · Adidas · Samba OG: preguntas por talle en MELI
+Dato. Dato con número y fuente.
+Grieta. Brecha concreta.
+Precio. estamos 8% más baratos que MELI
+Acción. Bombear en home 14 días.
+Validar. Rotación semanal.
+Impacto 3 · Esfuerzo 2 · Confianza 4 · Urgencia 3 · Prioridad 18.0
+Fuentes: GA4
+
+## Oferta externa
+La Cancha bombea Nike Pegasus 41 en home.
+
+OE-1 · La Cancha empuja Pegasus 41 y estamos 10% más caros
+Lo tenemos · Nike · La Cancha empuja Pegasus 41 y estamos 10% más caros
+Dato. Dato con número y fuente.
+Grieta. Brecha concreta.
+Precio. estamos 10% más caros que La Cancha
+Acción. Bombear en home 14 días.
+Validar. Rotación semanal.
+Impacto 3 · Esfuerzo 2 · Confianza 4 · Urgencia 4 · Prioridad 24.0
+Fuentes: GA4
+
+## Apuesta: DI-1 · New Balance 574 talle 44 convierte y no se ve
+Esfuerzo 1, dato propio, se mide en una semana.
+
+## Contestame
+- ¿Tenés stock de 574 en 43-45?
+- ¿Ya pautaste Samba este mes?
+- ¿Cuál descartás sin dudar?
+
+```
 
 ## Configuración
 
-Variables de entorno, todas opcionales salvo la clave:
-
 - `ANTHROPIC_API_KEY`: clave de API. Alternativa: `ant auth login`.
+- `GA4_PROPERTY_ID`, `GOOGLE_APPLICATION_CREDENTIALS`: GA4 por API.
+- `MELI_ACCESS_TOKEN`: MercadoLibre por API en vez de páginas públicas.
 - `RADARES_MODEL`: default `claude-opus-5`.
 - `RADARES_DIR`: dónde guardar la memoria. Default `./memoria`.
-- `RADARES_PERFIL`: ruta al perfil. Default `./perfil.md`.
-- `RADARES_MAX_BUSQUEDAS`: tope de búsquedas web por corrida. Default 18.
-- `RADARES_FALLBACKS=0`: desactiva el fallback server-side ante rechazos de los clasificadores de seguridad. Viene activado.
+- `RADARES_MAX_BUSQUEDAS`: tope de búsquedas web del analista. Default 8.
+- `RADARES_FALLBACKS=0`: desactiva el fallback server-side ante rechazos de seguridad.
+
+## Costos
+
+Recolectar no cuesta tokens. Analizar es una llamada a Opus 5 con la evidencia cruzada y hasta 8 consultas web: presupuestá entre 0,5 y 2 dólares por corrida. El feedback cuesta centavos.
 
 ## Estructura
 
 ```
-perfil.md            contexto del negocio (editable)
+fuentes.toml          configuración de fuentes y competidores
+perfil.md             contexto del negocio
 radares/
-  prompts.py         identidad del agente y prompts de las tres fases
-  investigar.py      fase 1: búsqueda web, dossier
-  analizar.py        fase 2: informe estructurado
-  aprender.py        fase 3: feedback a lecciones
-  schema.py          modelos de datos (oportunidad, informe, lección)
-  memoria.py         persistencia en memoria/
-  render.py          informe a texto ejecutivo
-  cliente.py         SDK de Anthropic: streaming, refusal, fallbacks
-  cli.py             comandos
-memoria/             corridas, lecciones y feedback (no se versiona)
-tests/               pruebas sin llamadas reales a la API
+  catalogo.py         carga del catálogo y cruce difuso
+  fuentes/ga4.py      GA4 API o CSV
+  fuentes/trends.py   Google Trends (pytrends) o CSV
+  fuentes/meli.py     MercadoLibre API o páginas públicas
+  fuentes/competencia.py  banners y productos de competidores
+  radar_interno.py    señales de demanda interna
+  radar_externo.py    señales de demanda externa
+  radar_oferta.py     señales de oferta externa y gap de precio
+  recolectar.py       orquesta fuentes y arma la evidencia
+  analizar.py         evidencia -> informe (Claude, salida estructurada)
+  aprender.py         feedback -> lecciones
+  schema.py, render.py, memoria.py, cliente.py, cli.py
+memoria/              corridas, lecciones, feedback (no se versiona)
+tests/                sin llamadas reales a la API ni a la red
 ```
 
 ## Tests
@@ -84,5 +166,3 @@ tests/               pruebas sin llamadas reales a la API
 ```bash
 pytest -q
 ```
-
-Las pruebas simulan al cliente de la API: no gastan tokens.

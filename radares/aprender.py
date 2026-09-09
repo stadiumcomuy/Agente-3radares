@@ -48,13 +48,12 @@ def aplicar_aprendizaje(mem: Memoria, corrida: Corrida, feedback_txt: str, extra
     """Persiste feedback, resultados y lecciones. Devuelve líneas para mostrar."""
     lineas: list[str] = []
     existentes = {l.id for l in mem.cargar_lecciones()}
-    n_opps = len(corrida.informe.oportunidades)
-    resultados = [r for r in extraido.resultados if 1 <= r.indice <= n_opps]
+    ids = {o.id: o for o in corrida.informe.oportunidades()}
+    resultados = [r for r in extraido.resultados if r.id in ids]
     fb = Feedback(fecha=ahora_iso(), corrida=corrida.id, texto=feedback_txt, resultados=resultados)
     mem.agregar_feedback(corrida, fb)
     for r in resultados:
-        titulo = corrida.informe.oportunidades[r.indice - 1].titulo
-        lineas.append(f"Oportunidad {r.indice} \"{titulo}\": {r.resultado}" + (f" ({r.nota})" if r.nota else ""))
+        lineas.append(f"{r.id} \"{ids[r.id].titulo}\": {r.resultado}" + (f" ({r.nota})" if r.nota else ""))
     for ln in extraido.lecciones:
         if ln.refuerza_id and ln.refuerza_id in existentes:
             l = mem.reforzar_leccion(ln.refuerza_id)

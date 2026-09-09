@@ -1,0 +1,43 @@
+# Fuentes de datos del radar. Editá lo que aplique. Lo vacío se ignora.
+
+[sitio]
+nombre = "Stadium"
+url = "https://www.stadium.com.uy"
+
+[catalogo]
+# Tu catálogo con precios. Se usa para cruzar todo: "¿lo tenemos?" y "¿a qué precio?".
+# Elegí una fuente (la primera que esté completa gana):
+csv = ""                  # ej. "catalogo.csv" con columnas: sku, nombre, marca, categoria, precio, stock, url
+feed_google = ""          # URL del feed XML de Google Merchant / Shopping (la mayoría de las plataformas lo exponen)
+sitemap = ""              # URL del sitemap de productos; se leen los JSON-LD de cada página (lento, último recurso)
+max_paginas = 400
+
+[ga4]
+property_id = ""          # o variable de entorno GA4_PROPERTY_ID
+credenciales = ""         # ruta al JSON de la service account, o GOOGLE_APPLICATION_CREDENTIALS
+dias = 28
+min_vistas = 20           # ítems con menos vistas no se evalúan (ruido)
+# Alternativa sin API: exportá desde GA4 y pasá los archivos con --ga4-items y --ga4-busquedas
+
+[trends]
+geo = "UY"
+periodo = "today 3-m"
+# Semillas base. Se suman automáticamente las marcas del catálogo y las búsquedas top de GA4.
+semillas = ["championes", "zapatillas", "nike", "adidas", "puma", "new balance", "running"]
+
+[meli]
+sitio = "MLU"
+consultas = ["championes nike", "championes adidas", "zapatillas running", "championes new balance", "championes mujer", "championes hombre"]
+max_items_preguntas = 4   # cuántas publicaciones por consulta se abren para leer preguntas
+# Con token (env MELI_ACCESS_TOKEN) usa la API; sin token lee las páginas públicas.
+
+[competencia]
+max_links = 8             # cuántos links de banners se siguen por sitio
+sitios = [
+  { nombre = "La Cancha",     url = "https://www.lacancha.uy" },
+  { nombre = "Global Sports", url = "https://www.globalsports.com.uy" },
+  { nombre = "Macri Sport Life", url = "https://www.macrisportlife.uy" },
+  { nombre = "Menpi",         url = "https://menpi.uy" },
+  { nombre = "Nike UY",       url = "https://www.nike.com.uy" },
+  { nombre = "Adidas UY",     url = "https://www.adidas.com.uy" },
+]

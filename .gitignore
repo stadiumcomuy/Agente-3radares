@@ -10,3 +10,8 @@ build/
 # Datos de corridas y feedback: locales, no se versionan
 memoria/*
 !memoria/.gitkeep
+# Datos y credenciales locales
+*.json
+!tests/**/*.json
+catalogo.csv
+ga4*.csv

@@ -128,14 +128,13 @@ class Memoria:
             estado = {}
             for fb in c.feedback:
                 for r in fb.resultados:
-                    estado[r.indice] = r.resultado + (f" ({r.nota})" if r.nota else "")
-            lineas = [f"Corrida {c.id} ({c.fecha[:10]}, foco {c.foco}):"]
-            for i, o in enumerate(c.informe.oportunidades, 1):
-                marca = "apuesta" if i == c.informe.mejor_apuesta else ""
+                    estado[r.id] = r.resultado + (f" ({r.nota})" if r.nota else "")
+            lineas = [f"Corrida {c.id} ({c.fecha[:10]}):"]
+            for o in c.informe.oportunidades():
+                marca = " [apuesta]" if o.id == c.informe.mejor_apuesta else ""
                 lineas.append(
-                    f"  {i}. {o.titulo} [{o.foco}, marca {o.marca_sugerida}, "
-                    f"I{o.score.impacto} E{o.score.esfuerzo} C{o.score.confianza} U{o.score.urgencia}] "
-                    f"{marca} -> {estado.get(i, 'sin feedback')}"
+                    f"  {o.id} {o.titulo} (marca {o.marca_sugerida}, tenemos {o.lo_tenemos}, "
+                    f"I{o.score.impacto} E{o.score.esfuerzo} C{o.score.confianza} U{o.score.urgencia}){marca} -> {estado.get(o.id, 'sin feedback')}"
                 )
             fb_txt = [fb.texto.strip().replace("\n", " ")[:300] for fb in c.feedback if fb.texto.strip()]
             if fb_txt:
