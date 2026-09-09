@@ -36,7 +36,7 @@ HTTP_TIMEOUT = 20
 _DEFAULTS: dict[str, Any] = {
     "sitio": {"nombre": "", "url": ""},
     "catalogo": {"csv": "", "feed_google": "", "sitemap": "", "max_paginas": 400},
-    "ga4": {"property_id": "", "credenciales": "", "dias": 28, "min_vistas": 20},
+    "ga4": {"property_id": "", "proyecto": "", "credenciales": "", "dias": 28, "min_vistas": 20},
     "trends": {"geo": "UY", "periodo": "today 3-m", "semillas": []},
     "meli": {"sitio": "MLU", "consultas": [], "max_items_preguntas": 4},
     "competencia": {"max_links": 8, "sitios": []},
@@ -55,4 +55,6 @@ def cargar_fuentes(path: Path = FUENTES_PATH) -> dict[str, Any]:
     ga4 = conf["ga4"]
     ga4["property_id"] = ga4.get("property_id") or os.environ.get("GA4_PROPERTY_ID", "")
     ga4["credenciales"] = ga4.get("credenciales") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+    if ga4.get("proyecto"):
+        os.environ.setdefault("GOOGLE_CLOUD_QUOTA_PROJECT", str(ga4["proyecto"]))
     return conf

@@ -13,10 +13,11 @@ sitemap = ""              # URL del sitemap de productos; se leen los JSON-LD de
 max_paginas = 400
 
 [ga4]
-property_id = ""          # o variable de entorno GA4_PROPERTY_ID
-credenciales = ""         # ruta al JSON de la service account, o GOOGLE_APPLICATION_CREDENTIALS
-                          # Windows: 'C:\\Users\\fdelgado\\.config\\gcloud\\stadium-439020-2fa80406b3a0.json'
-                          # Para ver los property_id: radares ga4
+property_id = "309958662" # stadium.com.uy. Otras propiedades (radares ga4):
+                          #   404615845 Stadium Sport · 355120708 Miss Carol · 271467516 Peppos · 400003032 Clarks · 347103704 Stadium APP
+proyecto = "stadium-439020"  # proyecto GCP para la cuota cuando se usa el usuario de Google (ADC)
+credenciales = ""         # vacío = credenciales por defecto de Google (gcloud auth application-default login).
+                          # O ruta al JSON de una service account con rol Lector en la propiedad.
 dias = 28
 min_vistas = 20           # ítems con menos vistas no se evalúan (ruido)
 # Alternativa sin API: exportá desde GA4 y pasá los archivos con --ga4-items y --ga4-busquedas
