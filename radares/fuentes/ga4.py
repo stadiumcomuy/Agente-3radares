@@ -213,3 +213,29 @@ def cargar_ga4(conf: dict, items_csv: Optional[str] = None, busquedas_csv: Optio
     if not conf.get("property_id"):
         raise RuntimeError("GA4 sin configurar: falta property_id (fuentes.toml o GA4_PROPERTY_ID), o pasá --ga4-items/--ga4-busquedas.")
     return desde_api(str(conf["property_id"]), conf.get("credenciales", ""), int(conf.get("dias", 28)))
+
+
+# ------------------------------------------------------------- descubrimiento
+def listar_propiedades(credenciales: str = "") -> List[dict]:
+    """Lista cuentas y propiedades GA4 visibles para la credencial (Admin API, solo lectura)."""
+    from google.analytics.admin import AnalyticsAdminServiceClient
+
+    if credenciales:
+        from google.oauth2 import service_account
+
+        creds = service_account.Credentials.from_service_account_file(
+            credenciales, scopes=["https://www.googleapis.com/auth/analytics.readonly"]
+        )
+        client = AnalyticsAdminServiceClient(credentials=creds)
+    else:
+        client = AnalyticsAdminServiceClient()
+    out = []
+    for cuenta in client.list_account_summaries():
+        for prop in cuenta.property_summaries:
+            out.append({
+                "cuenta": cuenta.display_name,
+                "propiedad": prop.display_name,
+                "property_id": prop.property.split("/")[-1],
+                "tipo": str(prop.property_type).replace("PropertyType.", ""),
+            })
+    return out

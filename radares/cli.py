@@ -83,6 +83,26 @@ def cmd_fuentes(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ga4(args: argparse.Namespace) -> int:
+    """Lista las propiedades GA4 accesibles con la credencial configurada."""
+    from .fuentes.ga4 import listar_propiedades
+
+    conf = cargar_fuentes()["ga4"]
+    cred = args.credenciales or conf.get("credenciales", "")
+    try:
+        props = listar_propiedades(cred)
+    except Exception as e:  # noqa: BLE001
+        sys.exit(f"[radares] No pude listar propiedades: {type(e).__name__}: {e}\n"
+                 "Revisá que la service account tenga rol Lector en las propiedades de GA4 (Admin > Gestión de acceso a la propiedad).")
+    if not props:
+        print("La credencial no ve ninguna propiedad. Agregá el mail de la service account como Lector en cada propiedad de GA4.")
+        return 1
+    for p in props:
+        print(f"{p['property_id']:>12}  {p['cuenta']} / {p['propiedad']}  ({p['tipo']})")
+    print("\nPoné el property_id del sitio en [ga4].property_id de fuentes.toml (o GA4_PROPERTY_ID).")
+    return 0
+
+
 def cmd_feedback(args: argparse.Namespace) -> int:
     from .aprender import aplicar_aprendizaje, destilar
 
@@ -170,6 +190,10 @@ def construir_parser() -> argparse.ArgumentParser:
     _args_fuentes(f)
     f.add_argument("--detalle", action="store_true", help="Muestra también las señales detectadas.")
     f.set_defaults(func=cmd_fuentes)
+
+    g = sub.add_parser("ga4", help="Lista las propiedades GA4 que ve la credencial. Para encontrar el property_id.")
+    g.add_argument("--credenciales", help="Ruta al JSON de la service account (pisa fuentes.toml).")
+    g.set_defaults(func=cmd_ga4)
 
     fb = sub.add_parser("feedback", help="Registra feedback sobre una corrida y extrae lecciones.")
     fb.add_argument("corrida", nargs="?", default="ultima", help="ID de corrida (o prefijo). Default: la última.")

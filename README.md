@@ -166,3 +166,17 @@ tests/                sin llamadas reales a la API ni a la red
 ```bash
 pytest -q
 ```
+
+## Windows
+
+Todo funciona igual en PowerShell. Instalación:
+
+```powershell
+git clone https://github.com/stadiumcomuy/Agente-3radares.git
+cd Agente-3radares
+py -3.11 -m venv .venv; .\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+$env:ANTHROPIC_API_KEY = "..."
+radares ga4 --credenciales "$HOME\.config\gcloud\<service-account>.json"   # lista property_id
+radares fuentes --frente demanda_interna                                     # diagnóstico sin gastar tokens
+```
